@@ -4,8 +4,9 @@ import { supabase } from './supabaseClient'
 function App() {
   const [name, setName] = useState('')
   const [queue, setQueue] = useState([])
-  // Check if this device already has a player in the queue
   const [hasJoined, setHasJoined] = useState(localStorage.getItem('fauHoopsJoined') === 'true')
+  // We need to keep track of the local name to check ownership
+  const [myLocalName, setMyLocalName] = useState(localStorage.getItem('fauHoopsName') || '')
 
   useEffect(() => {
     fetchQueue()
@@ -30,14 +31,14 @@ function App() {
     const currentQueue = data || []
     setQueue(currentQueue)
 
-    // Safety Check: If the queue is empty or their ID isn't in it,
-    // we should let them join again (in case they were deleted by someone else)
-    // We'll handle this by checking if the local name still exists in the DB
-    const myName = localStorage.getItem('fauHoopsName')
-    const stillInQueue = currentQueue.some(player => player.name === myName)
+    const storedName = localStorage.getItem('fauHoopsName')
+    const stillInQueue = currentQueue.some(player => player.name === storedName)
+
     if (!stillInQueue && hasJoined) {
       setHasJoined(false)
+      setMyLocalName('')
       localStorage.removeItem('fauHoopsJoined')
+      localStorage.removeItem('fauHoopsName')
     }
   }
 
@@ -52,15 +53,22 @@ function App() {
     if (error) {
       alert("Error joining queue!")
     } else {
-      // Lock the device
+      const joinedName = name.trim()
       setHasJoined(true)
+      setMyLocalName(joinedName)
       localStorage.setItem('fauHoopsJoined', 'true')
-      localStorage.setItem('fauHoopsName', name.trim())
+      localStorage.setItem('fauHoopsName', joinedName)
       setName('')
     }
   }
 
   const leaveQueue = async (id, playerName) => {
+    // SECURITY CHECK: Only allow delete if the name matches the device
+    if (playerName !== localStorage.getItem('fauHoopsName')) {
+      alert("You can only remove yourself!")
+      return
+    }
+
     const { error } = await supabase
       .from('queue')
       .delete()
@@ -69,12 +77,10 @@ function App() {
     if (error) {
       alert("Error deleting entry.")
     } else {
-      // If the person leaving is THIS device's user, unlock the join button
-      if (playerName === localStorage.getItem('fauHoopsName')) {
-        setHasJoined(false)
-        localStorage.removeItem('fauHoopsJoined')
-        localStorage.removeItem('fauHoopsName')
-      }
+      setHasJoined(false)
+      setMyLocalName('')
+      localStorage.removeItem('fauHoopsJoined')
+      localStorage.removeItem('fauHoopsName')
     }
   }
 
@@ -104,7 +110,6 @@ function App() {
           </p>
         </header>
 
-        {/* Input Section - Locks if already joined */}
         <div style={{
           background: 'rgba(255, 255, 255, 0.05)',
           backdropFilter: 'blur(10px)',
@@ -116,8 +121,8 @@ function App() {
         }}>
           {hasJoined ? (
             <div style={{ textAlign: 'center', padding: '10px' }}>
-              <div style={{ color: '#CC0000', fontWeight: 'bold', fontSize: '18px', marginBottom: '5px' }}>YOU'RE IN LINE</div>
-              <p style={{ color: '#aaa', fontSize: '14px', margin: 0 }}>Wait for your turn to play!</p>
+              <div style={{ color: '#CC0000', fontWeight: 'bold', fontSize: '18px', marginBottom: '5px' }}>YOU'RE IN LINE: {myLocalName}</div>
+              <p style={{ color: '#aaa', fontSize: '14px', margin: 0 }}>Good luck on the court!</p>
             </div>
           ) : (
             <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -157,7 +162,6 @@ function App() {
           )}
         </div>
 
-        {/* Queue List */}
         <div style={{ marginBottom: '40px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '0 10px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Current Waitlist</h2>
@@ -208,28 +212,29 @@ function App() {
                       <div style={{ fontSize: '18px', fontWeight: '700', color: index === 0 ? '#fff' : '#ddd' }}>
                         {player.name}
                       </div>
-                      {index === 0 && (
-                        <div style={{ fontSize: '10px', color: '#CC0000', fontWeight: '900', letterSpacing: '1px', marginTop: '2px' }}>
-                          ON DECK • GET READY
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => leaveQueue(player.id, player.name)}
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: 'none',
-                      color: '#fff',
-                      width: '30px',
-                      height: '30px',
-                      borderRadius: '50%',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ✕
-                  </button>
+                  {/* ONLY SHOW X IF IT IS YOUR NAME */}
+                  {player.name === myLocalName && (
+                    <button
+                      onClick={() => leaveQueue(player.id, player.name)}
+                      style={{
+                        background: 'rgba(255, 0, 0, 0.2)',
+                        border: '1px solid rgba(255, 0, 0, 0.3)',
+                        color: '#fff',
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '50%',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
