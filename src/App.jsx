@@ -23,7 +23,7 @@ function App() {
     }
   }, [])
 
-  // Timer Logic
+  // Live Timer logic
   useEffect(() => {
     let interval
     if (currentGame.length === 2) {
@@ -38,18 +38,27 @@ function App() {
     const { data: qData } = await supabase.from('queue').select('*').order('created_at', { ascending: true })
     const { data: gData } = await supabase.from('current_game').select('*').order('joined_at', { ascending: true })
 
-    setQueue(qData || [])
-    setCurrentGame(gData || [])
+    const currentQ = qData || []
+    const currentG = gData || []
 
-    // Automatic Promotion: If less than 2 players on court and people are in queue
-    if ((gData?.length || 0) < 2 && (qData?.length || 0) > 0) {
-      promotePlayer(qData[0])
+    setQueue(currentQ)
+    setCurrentGame(currentG)
+
+    // AUTO-PROMOTION: If court has space and queue has people
+    if (currentG.length < 2 && currentQ.length > 0) {
+      const playerToPromote = currentQ[0]
+      await supabase.from('current_game').insert([{ player_name: playerToPromote.name }])
+      await supabase.from('queue').delete().eq('id', playerToPromote.id)
     }
-  }
 
-  const promotePlayer = async (player) => {
-    await supabase.from('current_game').insert([{ player_name: player.name }])
-    await supabase.from('queue').delete().eq('id', player.id)
+    // LOCALSTORAGE SYNC: If you were removed from both tables, unlock your phone
+    const inQueue = currentQ.some(p => p.name === myLocalName)
+    const inGame = currentG.some(p => p.player_name === myLocalName)
+    if (!inQueue && !inGame && hasJoined) {
+      localStorage.removeItem('fauHoopsJoined')
+      localStorage.removeItem('fauHoopsName')
+      window.location.reload()
+    }
   }
 
   const formatTime = (seconds) => {
@@ -66,14 +75,24 @@ function App() {
       localStorage.setItem('fauHoopsJoined', 'true')
       localStorage.setItem('fauHoopsName', name.trim())
       setName('')
-      window.location.reload() // Hard refresh to sync state
     }
   }
 
-  const handleFinish = () => setShowResults(true)
+  const leaveQueue = async (id, playerName, isFromGameTable = false) => {
+    if (playerName !== myLocalName) return // SELF-REMOVE ONLY
 
-  const resolveGame = async (winnerName, loserId) => {
-    // Delete the loser from current_game
+    const table = isFromGameTable ? 'current_game' : 'queue'
+    const { error } = await supabase.from(table).delete().eq('id', id)
+
+    if (!error) {
+      localStorage.removeItem('fauHoopsJoined')
+      localStorage.removeItem('fauHoopsName')
+      setShowResults(false)
+    }
+  }
+
+  const resolveGame = async (winnerId, loserId) => {
+    // Loser is removed, winner stays. The fetch function will auto-pull the next player.
     await supabase.from('current_game').delete().eq('id', loserId)
     setShowResults(false)
   }
@@ -84,38 +103,51 @@ function App() {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #001f3f 0%, #003366 100%)', padding: '20px 10px', color: '#fff', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
 
-        {/* CURRENT GAME SECTION */}
-        <div style={{ background: 'rgba(255, 255, 255, 0.1)', padding: '25px', borderRadius: '24px', border: '2px solid #CC0000', marginBottom: '20px', textAlign: 'center' }}>
-          <h2 style={{ fontSize: '14px', color: '#CC0000', fontWeight: '900', letterSpacing: '2px', marginBottom: '15px' }}>ON COURT</h2>
+        <header style={{ textAlign: 'center', padding: '30px 0' }}>
+          <div style={{ fontSize: '40px' }}>🏀</div>
+          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '800', textTransform: 'uppercase' }}>
+            Fau <span style={{ color: '#CC0000' }}>Hoops</span>
+          </h1>
+        </header>
 
-          <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '20px' }}>
-            {currentGame.length > 0 ? currentGame.map(p => (
-              <div key={p.id}>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{p.player_name}</div>
-                {p.player_name === myLocalName && <div style={{ fontSize: '10px', color: '#CC0000' }}>YOU</div>}
+        {/* ON COURT SECTION */}
+        <div style={{ background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(10px)', padding: '25px', borderRadius: '24px', border: '2px solid #CC0000', marginBottom: '20px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+          <h2 style={{ fontSize: '12px', color: '#CC0000', fontWeight: '900', letterSpacing: '2px', marginBottom: '15px' }}>LIVE ON COURT</h2>
+
+          <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '20px', gap: '10px' }}>
+            {currentGame.map((p, idx) => (
+              <div key={p.id} style={{ flex: 1 }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color: p.player_name === myLocalName ? '#CC0000' : '#fff' }}>{p.player_name}</div>
+                {p.player_name === myLocalName && (
+                  <button onClick={() => leaveQueue(p.id, p.player_name, true)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '12px' }}>[Leave Court]</button>
+                )}
               </div>
-            )) : <div style={{ opacity: 0.5 }}>Waiting for players...</div>}
+            ))}
+            {currentGame.length < 2 && <div style={{ opacity: 0.3 }}>Waiting for opponent...</div>}
           </div>
 
           {currentGame.length === 2 && (
             <>
-              <div style={{ fontSize: '32px', fontWeight: '800', marginBottom: '20px', fontFamily: 'monospace' }}>{formatTime(gameTime)}</div>
+              <div style={{ fontSize: '36px', fontWeight: '800', marginBottom: '20px', color: '#fff' }}>{formatTime(gameTime)}</div>
 
               {amIInGame && !showResults && (
-                <button onClick={handleFinish} style={{ width: '100%', padding: '15px', backgroundColor: '#CC0000', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}>FINISH GAME</button>
+                <button onClick={() => setShowResults(true)} style={{ width: '100%', padding: '15px', backgroundColor: '#CC0000', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>FINISH GAME</button>
               )}
 
               {showResults && amIInGame && (
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  {currentGame.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => resolveGame(p.player_name, currentGame.find(other => other.id !== p.id).id)}
-                      style={{ flex: 1, padding: '15px', backgroundColor: p.player_name === myLocalName ? '#28a745' : '#555', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}
-                    >
-                      {p.player_name === myLocalName ? "I WON" : `${p.player_name} WON`}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <p style={{ fontSize: '14px', fontWeight: 'bold' }}>Who won?</p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {currentGame.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => resolveGame(p.id, currentGame.find(other => other.id !== p.id).id)}
+                        style={{ flex: 1, padding: '12px', backgroundColor: p.player_name === myLocalName ? '#28a745' : '#444', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer' }}
+                      >
+                        {p.player_name === myLocalName ? "I Won" : `${p.player_name} Won`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </>
@@ -123,25 +155,30 @@ function App() {
         </div>
 
         {/* JOIN SECTION */}
-        {!hasJoined && !amIInGame && (
+        {!hasJoined && (
           <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '24px', marginBottom: '20px' }}>
-            <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter handle..." style={{ padding: '15px', borderRadius: '12px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white' }} />
-              <button type="submit" style={{ padding: '15px', backgroundColor: '#CC0000', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}>JOIN QUEUE</button>
+            <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter handle..." style={{ padding: '15px', borderRadius: '12px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', outline: 'none' }} />
+              <button type="submit" style={{ padding: '15px', backgroundColor: '#CC0000', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>JOIN THE LIST</button>
             </form>
           </div>
         )}
 
         {/* WAITLIST SECTION */}
-        <h3 style={{ fontSize: '18px', padding: '0 10px' }}>Next in Line ({queue.length})</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {queue.map((p, i) => (
-            <div key={p.id} style={{ padding: '15px 20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px', display: 'flex', justifyContent: 'space-between' }}>
-              <span>{i + 1}. {p.name}</span>
-              {p.name === myLocalName && <span style={{ color: '#CC0000', fontSize: '12px', fontWeight: 'bold' }}>YOU</span>}
-            </div>
-          ))}
+        <div style={{ padding: '0 10px' }}>
+          <h3 style={{ fontSize: '16px', marginBottom: '15px', opacity: 0.7 }}>NEXT UP ({queue.length})</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {queue.map((p, i) => (
+              <div key={p.id} style={{ padding: '18px', background: 'rgba(255,255,255,0.05)', borderRadius: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: '600' }}>{i + 1}. {p.name}</span>
+                {p.name === myLocalName && (
+                  <button onClick={() => leaveQueue(p.id, p.name, false)} style={{ backgroundColor: 'rgba(255,0,0,0.2)', border: 'none', color: 'white', padding: '5px 12px', borderRadius: '8px', cursor: 'pointer' }}>✕</button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
+
       </div>
     </div>
   )
