@@ -59,127 +59,158 @@ function App() {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#f0f2f5',
-      padding: '20px',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      background: 'linear-gradient(135deg, #001f3f 0%, #003366 100%)', // Deep FAU Gradient
+      padding: '20px 10px',
+      fontFamily: '"Inter", -apple-system, sans-serif',
+      color: '#fff'
     }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '480px', margin: '0 auto' }}>
 
-        {/* Header - FAU Blue */}
+        {/* Modern Header */}
         <header style={{
-          backgroundColor: '#003366',
-          padding: '30px 20px',
-          borderRadius: '20px',
-          color: 'white',
           textAlign: 'center',
-          marginBottom: '20px',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+          padding: '40px 0 20px',
         }}>
-          <h1 style={{ margin: 0, fontSize: '24px' }}>🏀 Boca Baller Queue</h1>
-          <p style={{ margin: '5px 0 0', opacity: 0.8, fontSize: '14px' }}>FAU Campus Recreation</p>
+          <div style={{ fontSize: '50px', marginBottom: '10px' }}>🏀</div>
+          <h1 style={{
+            margin: 0,
+            fontSize: '32px',
+            fontWeight: '800',
+            letterSpacing: '-1px',
+            textTransform: 'uppercase'
+          }}>
+            Fau <span style={{ color: '#CC0000' }}>Hoops</span>
+          </h1>
+          <p style={{ opacity: 0.6, fontSize: '14px', marginTop: '5px', fontWeight: '500' }}>
+            LIVE COURT QUEUE • BOCA RATON
+          </p>
         </header>
 
-        {/* Input Card */}
+        {/* Input Section - Glass Card */}
         <div style={{
-          backgroundColor: 'white',
-          padding: '20px',
-          borderRadius: '20px',
-          marginBottom: '20px',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+          background: 'rgba(255, 255, 255, 0.05)',
+          backdropFilter: 'blur(10px)',
+          padding: '25px',
+          borderRadius: '24px',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          marginBottom: '25px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
         }}>
-          <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#aaa', textTransform: 'uppercase', marginLeft: '5px' }}>
+              Player Name
+            </label>
             <input
               type="text"
-              placeholder="Enter your name..."
+              placeholder="Enter your handle..."
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{
-                padding: '15px',
+                padding: '18px',
                 fontSize: '16px',
-                borderRadius: '12px',
-                border: '1px solid #ddd',
+                borderRadius: '16px',
+                border: 'none',
                 outline: 'none',
-                backgroundColor: '#f9f9f9'
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                fontWeight: '500'
               }}
             />
             <button type="submit" style={{
-              padding: '15px',
-              backgroundColor: '#CC0000', // FAU Red
+              padding: '18px',
+              backgroundColor: '#CC0000',
               color: 'white',
               border: 'none',
-              borderRadius: '12px',
-              fontSize: '16px',
-              fontWeight: 'bold',
+              borderRadius: '16px',
+              fontSize: '18px',
+              fontWeight: '800',
               cursor: 'pointer',
-              transition: 'transform 0.1s'
+              boxShadow: '0 10px 20px rgba(204, 0, 0, 0.3)',
+              transition: 'all 0.2s ease'
             }}>
-              Join the Court
+              CLAIM NEXT SPOT
             </button>
           </form>
         </div>
 
-        {/* List Card */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: '20px',
-          overflow: 'hidden',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
-        }}>
-          <div style={{ padding: '15px 20px', borderBottom: '1px solid #f0f0f0', backgroundColor: '#fafafa' }}>
-            <h2 style={{ margin: 0, fontSize: '16px', color: '#555' }}>Waitlist</h2>
+        {/* Queue List - Clean List */}
+        <div style={{ marginBottom: '40px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '0 10px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Current Waitlist</h2>
+            <span style={{ fontSize: '12px', backgroundColor: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: '10px', color: '#aaa' }}>
+              {queue.length} PLAYERS
+            </span>
           </div>
 
           {queue.length === 0 ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#aaa' }}>
-              No one is waiting. Hop on!
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              background: 'rgba(255,255,255,0.03)',
+              borderRadius: '24px',
+              border: '2px dashed rgba(255,255,255,0.1)'
+            }}>
+              <p style={{ color: '#666', fontWeight: '500' }}>Court is open. No one in line.</p>
             </div>
           ) : (
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {queue.map((player, index) => (
                 <div key={player.id} style={{
-                  padding: '15px 20px',
-                  borderBottom: index === queue.length - 1 ? 'none' : '1px solid #f0f0f0',
+                  padding: '20px',
+                  borderRadius: '20px',
+                  background: index === 0
+                    ? 'linear-gradient(90deg, rgba(204, 0, 0, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%)'
+                    : 'rgba(255, 255, 255, 0.05)',
+                  border: index === 0 ? '1px solid rgba(204, 0, 0, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  backgroundColor: index === 0 ? '#fffef0' : 'transparent'
+                  animation: 'fadeIn 0.5s ease'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{
-                      fontWeight: 'bold',
-                      color: index === 0 ? '#003366' : '#888',
-                      fontSize: '18px'
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{
+                      width: '35px',
+                      height: '35px',
+                      borderRadius: '50%',
+                      backgroundColor: index === 0 ? '#CC0000' : 'rgba(255,255,255,0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '14px',
+                      fontWeight: 'bold'
                     }}>
                       {index + 1}
-                    </span>
-                    <span style={{
-                      fontSize: '18px',
-                      fontWeight: index === 0 ? '700' : '400',
-                      color: '#333'
-                    }}>
-                      {player.name}
-                    </span>
-                    {index === 0 && (
-                      <span style={{
-                        fontSize: '10px',
-                        backgroundColor: '#FFD700',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontWeight: 'bold'
-                      }}>NEXT UP</span>
-                    )}
+                    </div>
+                    <div>
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: index === 0 ? '#fff' : '#ddd'
+                      }}>
+                        {player.name}
+                      </div>
+                      {index === 0 && (
+                        <div style={{ fontSize: '10px', color: '#CC0000', fontWeight: '900', letterSpacing: '1px', marginTop: '2px' }}>
+                          ON DECK • GET READY
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Delete Button */}
                   <button
                     onClick={() => leaveQueue(player.id)}
                     style={{
-                      background: 'none',
+                      background: 'rgba(255,255,255,0.1)',
                       border: 'none',
-                      color: '#ccc',
+                      color: '#fff',
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '50%',
                       cursor: 'pointer',
-                      fontSize: '18px',
-                      padding: '5px'
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}
                   >
                     ✕
@@ -190,12 +221,11 @@ function App() {
           )}
         </div>
 
-        <p style={{ textAlign: 'center', color: '#999', fontSize: '12px', marginTop: '20px' }}>
-          Tap ✕ to remove yourself or the current player.
-        </p>
+        <footer style={{ textAlign: 'center', opacity: 0.3, fontSize: '12px', paddingBottom: '20px' }}>
+          FAU Basketball Community App
+        </footer>
       </div>
     </div>
   )
-}
 
 export default App
