@@ -10,7 +10,6 @@ function App() {
 
   const myLocalName = localStorage.getItem('fauHoopsName') || ''
 
-  // 1. Sync Data and Real-time Listeners
   useEffect(() => {
     fetchData()
 
@@ -28,7 +27,6 @@ function App() {
     }
   }, [])
 
-  // 2. Persistent Timer (Calculates Match Duration from DB)
   useEffect(() => {
     const interval = setInterval(() => {
       if (currentGame.length === 2) {
@@ -50,7 +48,6 @@ function App() {
     return () => clearInterval(interval)
   }, [currentGame])
 
-  // 3. Fetch Data & Handle Auto-Promotion
   const fetchData = async () => {
     const { data: qData } = await supabase.from('queue').select('*').order('created_at', { ascending: true })
     const { data: gData } = await supabase.from('current_game').select('*').order('joined_at', { ascending: true })
@@ -61,14 +58,12 @@ function App() {
     setQueue(currentQ)
     setCurrentGame(currentG)
 
-    // Sync Local Storage (Unlock device if name is gone from DB)
     const stillInSystem = currentQ.some(p => p.name === myLocalName) || currentG.some(p => p.player_name === myLocalName)
     if (!stillInSystem && myLocalName) {
       localStorage.removeItem('fauHoopsName')
       localStorage.removeItem('fauHoopsJoined')
     }
 
-    // Auto-Promote: If spot on court, move top of queue up
     if (currentG.length < 2 && currentQ.length > 0) {
       const nextPlayer = currentQ[0]
       try {
@@ -82,7 +77,6 @@ function App() {
     }
   }
 
-  // 4. Player Actions
   const joinQueue = async (e) => {
     e.preventDefault()
     const cleanName = name.trim()
@@ -120,15 +114,11 @@ function App() {
   const resolveGame = async (winnerId, loserId) => {
     const winner = currentGame.find(p => p.id === winnerId)
     const newStreak = (winner.streak || 0) + 1
-
-    // Update Winner's Streak and Remove Loser
     await supabase.from('current_game').update({ streak: newStreak }).eq('id', winnerId)
     const { error } = await supabase.from('current_game').delete().eq('id', loserId)
-
     if (!error) setShowResults(false)
   }
 
-  // Derived States
   const amIInGame = currentGame.some(p => p.player_name === myLocalName)
   const isRegistered = amIInGame || queue.some(p => p.name === myLocalName)
 
@@ -162,21 +152,26 @@ function App() {
 
           <div style={{ fontSize: '36px', fontWeight: '800', marginBottom: '20px', fontFamily: 'monospace' }}>{elapsedTime}</div>
 
+          {/* BUTTONS ONLY SHOW IF 2 PLAYERS ARE PRESENT */}
           {amIInGame && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {!showResults ? (
-                <button onClick={() => setShowResults(true)} style={{ width: '100%', padding: '15px', background: '#CC0000', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>FINISH GAME</button>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <p style={{ fontSize: '12px' }}>Winner stays, loser leaves:</p>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {currentGame.map(p => (
-                      <button key={p.id} onClick={() => resolveGame(p.id, currentGame.find(o => o.id !== p.id).id)} style={{ flex: 1, padding: '12px', background: p.player_name === myLocalName ? '#28a745' : '#444', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold' }}>
-                        {p.player_name === myLocalName ? "I Won" : `${p.player_name} Won`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              {currentGame.length === 2 && (
+                <>
+                  {!showResults ? (
+                    <button onClick={() => setShowResults(true)} style={{ width: '100%', padding: '15px', background: '#CC0000', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>FINISH GAME</button>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <p style={{ fontSize: '12px' }}>Winner stays, loser leaves:</p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {currentGame.map(p => (
+                          <button key={p.id} onClick={() => resolveGame(p.id, currentGame.find(o => o.id !== p.id).id)} style={{ flex: 1, padding: '12px', background: p.player_name === myLocalName ? '#28a745' : '#444', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold' }}>
+                            {p.player_name === myLocalName ? "I Won" : `${p.player_name} Won`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               <button onClick={leaveEverything} style={{ background: 'none', border: 'none', color: '#666', fontSize: '11px', textDecoration: 'underline', marginTop: '5px' }}>Leave Court</button>
             </div>
@@ -217,7 +212,6 @@ function App() {
           </div>
         </div>
 
-        {/* HIDDEN RESET */}
         <footer onClick={async () => { if (window.confirm("Admin: Clear everything?")) { await supabase.from('queue').delete().neq('id', '00000000-0000-0000-0000-000000000000'); await supabase.from('current_game').delete().neq('id', '00000000-0000-0000-0000-000000000000'); localStorage.clear(); window.location.reload(); } }} style={{ textAlign: 'center', opacity: 0.1, fontSize: '10px', padding: '50px 0', cursor: 'pointer' }}>
           FAU HOOPS • ADMIN RESET
         </footer>
