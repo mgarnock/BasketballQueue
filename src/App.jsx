@@ -5,11 +5,9 @@ function App() {
   const [name, setName] = useState('')
   const [queue, setQueue] = useState([])
 
-  // 1. Load initial data and set up Real-time listener
   useEffect(() => {
     fetchQueue()
 
-    // This "subscribes" to changes. If the database changes, the app updates instantly!
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes',
@@ -21,7 +19,6 @@ function App() {
     return () => supabase.removeChannel(channel)
   }, [])
 
-  // 2. Fetch the list from Supabase
   const fetchQueue = async () => {
     const { data } = await supabase
       .from('queue')
@@ -30,7 +27,6 @@ function App() {
     setQueue(data || [])
   }
 
-  // 3. Add a name to the list
   const joinQueue = async (e) => {
     e.preventDefault()
     if (!name.trim()) return
@@ -40,13 +36,12 @@ function App() {
       .insert([{ name: name.trim() }])
 
     if (error) {
-      alert("Error joining queue! Check your Supabase Policies.")
+      alert("Error joining queue!")
     } else {
-      setName('') // Clear input
+      setName('')
     }
   }
 
-  // 4. Remove a name (Admin/Delete function)
   const leaveQueue = async (id) => {
     const { error } = await supabase
       .from('queue')
@@ -59,18 +54,14 @@ function App() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #001f3f 0%, #003366 100%)', // Deep FAU Gradient
+      background: 'linear-gradient(135deg, #001f3f 0%, #003366 100%)',
       padding: '20px 10px',
       fontFamily: '"Inter", -apple-system, sans-serif',
       color: '#fff'
     }}>
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
 
-        {/* Modern Header */}
-        <header style={{
-          textAlign: 'center',
-          padding: '40px 0 20px',
-        }}>
+        <header style={{ textAlign: 'center', padding: '40px 0 20px' }}>
           <div style={{ fontSize: '50px', marginBottom: '10px' }}>🏀</div>
           <h1 style={{
             margin: 0,
@@ -86,7 +77,6 @@ function App() {
           </p>
         </header>
 
-        {/* Input Section - Glass Card */}
         <div style={{
           background: 'rgba(255, 255, 255, 0.05)',
           backdropFilter: 'blur(10px)',
@@ -125,15 +115,13 @@ function App() {
               fontSize: '18px',
               fontWeight: '800',
               cursor: 'pointer',
-              boxShadow: '0 10px 20px rgba(204, 0, 0, 0.3)',
-              transition: 'all 0.2s ease'
+              boxShadow: '0 10px 20px rgba(204, 0, 0, 0.3)'
             }}>
               CLAIM NEXT SPOT
             </button>
           </form>
         </div>
 
-        {/* Queue List - Clean List */}
         <div style={{ marginBottom: '40px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '0 10px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Current Waitlist</h2>
@@ -164,8 +152,7 @@ function App() {
                   border: index === 0 ? '1px solid rgba(204, 0, 0, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  animation: 'fadeIn 0.5s ease'
+                  justifyContent: 'space-between'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{
@@ -182,11 +169,7 @@ function App() {
                       {index + 1}
                     </div>
                     <div>
-                      <div style={{
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: index === 0 ? '#fff' : '#ddd'
-                      }}>
+                      <div style={{ fontSize: '18px', fontWeight: '700', color: index === 0 ? '#fff' : '#ddd' }}>
                         {player.name}
                       </div>
                       {index === 0 && (
@@ -206,11 +189,7 @@ function App() {
                       width: '30px',
                       height: '30px',
                       borderRadius: '50%',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
+                      cursor: 'pointer'
                     }}
                   >
                     ✕
@@ -227,5 +206,6 @@ function App() {
       </div>
     </div>
   )
+}
 
 export default App
