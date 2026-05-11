@@ -4,246 +4,144 @@ import { supabase } from './supabaseClient'
 function App() {
   const [name, setName] = useState('')
   const [queue, setQueue] = useState([])
-  const [hasJoined, setHasJoined] = useState(localStorage.getItem('fauHoopsJoined') === 'true')
-  // We need to keep track of the local name to check ownership
-  const [myLocalName, setMyLocalName] = useState(localStorage.getItem('fauHoopsName') || '')
+  const [currentGame, setCurrentGame] = useState([])
+  const [gameTime, setGameTime] = useState(0)
+  const [showResults, setShowResults] = useState(false)
+
+  const myLocalName = localStorage.getItem('fauHoopsName') || ''
+  const hasJoined = localStorage.getItem('fauHoopsJoined') === 'true'
 
   useEffect(() => {
-    fetchQueue()
+    fetchData()
 
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'queue' },
-        () => fetchQueue()
-      )
-      .subscribe()
+    const queueChannel = supabase.channel('queue-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'queue' }, () => fetchData()).subscribe()
+    const gameChannel = supabase.channel('game-changes').on('postgres_changes', { event: '*', schema: 'public', table: 'current_game' }, () => fetchData()).subscribe()
 
-    return () => supabase.removeChannel(channel)
+    return () => {
+      supabase.removeChannel(queueChannel)
+      supabase.removeChannel(gameChannel)
+    }
   }, [])
 
-  const fetchQueue = async () => {
-    const { data } = await supabase
-      .from('queue')
-      .select('*')
-      .order('created_at', { ascending: true })
-
-    const currentQueue = data || []
-    setQueue(currentQueue)
-
-    const storedName = localStorage.getItem('fauHoopsName')
-    const stillInQueue = currentQueue.some(player => player.name === storedName)
-
-    if (!stillInQueue && hasJoined) {
-      setHasJoined(false)
-      setMyLocalName('')
-      localStorage.removeItem('fauHoopsJoined')
-      localStorage.removeItem('fauHoopsName')
+  // Timer Logic
+  useEffect(() => {
+    let interval
+    if (currentGame.length === 2) {
+      interval = setInterval(() => setGameTime(prev => prev + 1), 1000)
+    } else {
+      setGameTime(0)
     }
+    return () => clearInterval(interval)
+  }, [currentGame])
+
+  const fetchData = async () => {
+    const { data: qData } = await supabase.from('queue').select('*').order('created_at', { ascending: true })
+    const { data: gData } = await supabase.from('current_game').select('*').order('joined_at', { ascending: true })
+
+    setQueue(qData || [])
+    setCurrentGame(gData || [])
+
+    // Automatic Promotion: If less than 2 players on court and people are in queue
+    if ((gData?.length || 0) < 2 && (qData?.length || 0) > 0) {
+      promotePlayer(qData[0])
+    }
+  }
+
+  const promotePlayer = async (player) => {
+    await supabase.from('current_game').insert([{ player_name: player.name }])
+    await supabase.from('queue').delete().eq('id', player.id)
+  }
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`
   }
 
   const joinQueue = async (e) => {
     e.preventDefault()
     if (!name.trim() || hasJoined) return
-
-    const { error } = await supabase
-      .from('queue')
-      .insert([{ name: name.trim() }])
-
-    if (error) {
-      alert("Error joining queue!")
-    } else {
-      const joinedName = name.trim()
-      setHasJoined(true)
-      setMyLocalName(joinedName)
+    const { error } = await supabase.from('queue').insert([{ name: name.trim() }])
+    if (!error) {
       localStorage.setItem('fauHoopsJoined', 'true')
-      localStorage.setItem('fauHoopsName', joinedName)
+      localStorage.setItem('fauHoopsName', name.trim())
       setName('')
+      window.location.reload() // Hard refresh to sync state
     }
   }
 
-  const leaveQueue = async (id, playerName) => {
-    // SECURITY CHECK: Only allow delete if the name matches the device
-    if (playerName !== localStorage.getItem('fauHoopsName')) {
-      alert("You can only remove yourself!")
-      return
-    }
+  const handleFinish = () => setShowResults(true)
 
-    const { error } = await supabase
-      .from('queue')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      alert("Error deleting entry.")
-    } else {
-      setHasJoined(false)
-      setMyLocalName('')
-      localStorage.removeItem('fauHoopsJoined')
-      localStorage.removeItem('fauHoopsName')
-    }
+  const resolveGame = async (winnerName, loserId) => {
+    // Delete the loser from current_game
+    await supabase.from('current_game').delete().eq('id', loserId)
+    setShowResults(false)
   }
+
+  const amIInGame = currentGame.some(p => p.player_name === myLocalName)
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #001f3f 0%, #003366 100%)',
-      padding: '20px 10px',
-      fontFamily: '"Inter", -apple-system, sans-serif',
-      color: '#fff'
-    }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #001f3f 0%, #003366 100%)', padding: '20px 10px', color: '#fff', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ maxWidth: '480px', margin: '0 auto' }}>
 
-        <header style={{ textAlign: 'center', padding: '40px 0 20px' }}>
-          <div style={{ fontSize: '50px', marginBottom: '10px' }}>🏀</div>
-          <h1 style={{
-            margin: 0,
-            fontSize: '32px',
-            fontWeight: '800',
-            letterSpacing: '-1px',
-            textTransform: 'uppercase'
-          }}>
-            Fau <span style={{ color: '#CC0000' }}>Hoops</span>
-          </h1>
-          <p style={{ opacity: 0.6, fontSize: '14px', marginTop: '5px', fontWeight: '500' }}>
-            LIVE COURT QUEUE • BOCA RATON
-          </p>
-        </header>
+        {/* CURRENT GAME SECTION */}
+        <div style={{ background: 'rgba(255, 255, 255, 0.1)', padding: '25px', borderRadius: '24px', border: '2px solid #CC0000', marginBottom: '20px', textAlign: 'center' }}>
+          <h2 style={{ fontSize: '14px', color: '#CC0000', fontWeight: '900', letterSpacing: '2px', marginBottom: '15px' }}>ON COURT</h2>
 
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(10px)',
-          padding: '25px',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          marginBottom: '25px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-        }}>
-          {hasJoined ? (
-            <div style={{ textAlign: 'center', padding: '10px' }}>
-              <div style={{ color: '#CC0000', fontWeight: 'bold', fontSize: '18px', marginBottom: '5px' }}>YOU'RE IN LINE: {myLocalName}</div>
-              <p style={{ color: '#aaa', fontSize: '14px', margin: 0 }}>Good luck on the court!</p>
-            </div>
-          ) : (
-            <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#aaa', textTransform: 'uppercase', marginLeft: '5px' }}>
-                Player Name
-              </label>
-              <input
-                type="text"
-                placeholder="Enter your handle..."
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={{
-                  padding: '18px',
-                  fontSize: '16px',
-                  borderRadius: '16px',
-                  border: 'none',
-                  outline: 'none',
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  fontWeight: '500'
-                }}
-              />
-              <button type="submit" style={{
-                padding: '18px',
-                backgroundColor: '#CC0000',
-                color: 'white',
-                border: 'none',
-                borderRadius: '16px',
-                fontSize: '18px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                boxShadow: '0 10px 20px rgba(204, 0, 0, 0.3)'
-              }}>
-                CLAIM NEXT SPOT
-              </button>
-            </form>
-          )}
-        </div>
-
-        <div style={{ marginBottom: '40px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '0 10px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Current Waitlist</h2>
-            <span style={{ fontSize: '12px', backgroundColor: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: '10px', color: '#aaa' }}>
-              {queue.length} PLAYERS
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '20px' }}>
+            {currentGame.length > 0 ? currentGame.map(p => (
+              <div key={p.id}>
+                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{p.player_name}</div>
+                {p.player_name === myLocalName && <div style={{ fontSize: '10px', color: '#CC0000' }}>YOU</div>}
+              </div>
+            )) : <div style={{ opacity: 0.5 }}>Waiting for players...</div>}
           </div>
 
-          {queue.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '60px 20px',
-              background: 'rgba(255,255,255,0.03)',
-              borderRadius: '24px',
-              border: '2px dashed rgba(255,255,255,0.1)'
-            }}>
-              <p style={{ color: '#666', fontWeight: '500' }}>Court is open. No one in line.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {queue.map((player, index) => (
-                <div key={player.id} style={{
-                  padding: '20px',
-                  borderRadius: '20px',
-                  background: index === 0
-                    ? 'linear-gradient(90deg, rgba(204, 0, 0, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  border: index === 0 ? '1px solid rgba(204, 0, 0, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{
-                      width: '35px',
-                      height: '35px',
-                      borderRadius: '50%',
-                      backgroundColor: index === 0 ? '#CC0000' : 'rgba(255,255,255,0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      fontWeight: 'bold'
-                    }}>
-                      {index + 1}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: '700', color: index === 0 ? '#fff' : '#ddd' }}>
-                        {player.name}
-                      </div>
-                    </div>
-                  </div>
+          {currentGame.length === 2 && (
+            <>
+              <div style={{ fontSize: '32px', fontWeight: '800', marginBottom: '20px', fontFamily: 'monospace' }}>{formatTime(gameTime)}</div>
 
-                  {/* ONLY SHOW X IF IT IS YOUR NAME */}
-                  {player.name === myLocalName && (
+              {amIInGame && !showResults && (
+                <button onClick={handleFinish} style={{ width: '100%', padding: '15px', backgroundColor: '#CC0000', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}>FINISH GAME</button>
+              )}
+
+              {showResults && amIInGame && (
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {currentGame.map(p => (
                     <button
-                      onClick={() => leaveQueue(player.id, player.name)}
-                      style={{
-                        background: 'rgba(255, 0, 0, 0.2)',
-                        border: '1px solid rgba(255, 0, 0, 0.3)',
-                        color: '#fff',
-                        width: '30px',
-                        height: '30px',
-                        borderRadius: '50%',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
+                      key={p.id}
+                      onClick={() => resolveGame(p.player_name, currentGame.find(other => other.id !== p.id).id)}
+                      style={{ flex: 1, padding: '15px', backgroundColor: p.player_name === myLocalName ? '#28a745' : '#555', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}
                     >
-                      ✕
+                      {p.player_name === myLocalName ? "I WON" : `${p.player_name} WON`}
                     </button>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 
-        <footer style={{ textAlign: 'center', opacity: 0.3, fontSize: '12px', paddingBottom: '20px' }}>
-          FAU Basketball Community App
-        </footer>
+        {/* JOIN SECTION */}
+        {!hasJoined && !amIInGame && (
+          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '24px', marginBottom: '20px' }}>
+            <form onSubmit={joinQueue} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter handle..." style={{ padding: '15px', borderRadius: '12px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white' }} />
+              <button type="submit" style={{ padding: '15px', backgroundColor: '#CC0000', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}>JOIN QUEUE</button>
+            </form>
+          </div>
+        )}
+
+        {/* WAITLIST SECTION */}
+        <h3 style={{ fontSize: '18px', padding: '0 10px' }}>Next in Line ({queue.length})</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {queue.map((p, i) => (
+            <div key={p.id} style={{ padding: '15px 20px', background: 'rgba(255,255,255,0.05)', borderRadius: '15px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>{i + 1}. {p.name}</span>
+              {p.name === myLocalName && <span style={{ color: '#CC0000', fontSize: '12px', fontWeight: 'bold' }}>YOU</span>}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
